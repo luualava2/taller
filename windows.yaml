@@ -1,81 +1,47 @@
-
 - name: Validaciones y configuracion en Windows
-
   hosts: os_windows
-
   gather_facts: no
- 
+
   vars:
-
     usuario: ecuador
-
     servicios_criticos:
-
       - Spooler
-
       - W32Time
- 
+
   tasks:
- 
+
     - name: Verificar uso de CPU
-
       win_shell: |
-
-        Get-WmiObject win32_processor | 
-
-        Select-Object LoadPercentage
-
+        Get-WmiObject win32_processor | Select-Object LoadPercentage
       register: cpu_usage
- 
+
     - name: Mostrar uso de CPU
-
       debug:
-
         var: cpu_usage.stdout_lines
- 
+
     - name: Verificar servicios
-
       win_service:
-
         name: "{{ item }}"
-
       register: service_status
-
       loop: "{{ servicios_criticos }}"
-
       ignore_errors: yes
- 
+
     - name: Mostrar estado de servicios
-
       debug:
-
-        msg: "Servicio {{ item.name }} estado: {{ item.state }}"
-
+        msg: "Servicio {{ item.item }} estado: {{ item.state | default('desconocido') }}"
       loop: "{{ service_status.results }}"
- 
+
     - name: Crear usuario
-
       win_user:
-
         name: "{{ usuario }}"
-
         password: "Password123!"
-
         state: present
-
         groups:
-
           - Users
- 
+
     - name: Instalar actualizaciones de Windows
-
       win_updates:
-
         category_names:
-
           - SecurityUpdates
-
           - CriticalUpdates
-
         reboot: yes
- 
