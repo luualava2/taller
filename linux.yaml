@@ -1,6 +1,6 @@
 - name: Validaciones y configuracion en Linux
 
-  hosts: linux_servers
+  hosts: os_linux
 
   become: yes
  
