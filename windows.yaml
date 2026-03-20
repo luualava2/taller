@@ -1,7 +1,7 @@
 
 - name: Validaciones y configuracion en Windows
 
-  hosts: windows_servers
+  hosts: os_windows
 
   gather_facts: no
  
