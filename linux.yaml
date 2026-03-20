@@ -1,76 +1,58 @@
 - name: Validaciones y configuracion en Linux
-
   hosts: os_linux
-
   become: yes
- 
-  vars:
 
+  vars:
     usuario: ecuador
 
-    servicios_criticos:
+    servicios_criticos_debian:
+      - ssh.service
+      - cron.service
+      - nginx.service
 
-      - ssh
+    servicios_criticos_redhat:
+      - sshd.service
+      - crond.service
+      - nginx.service
 
-      - cron
-
-      - nginx   # ajusta según tu entorno
- 
   tasks:
- 
+
     - name: Verificar uso de disco
-
       command: df -h
-
       register: disk_usage
- 
+
     - name: Mostrar uso de disco
-
       debug:
-
         var: disk_usage.stdout_lines
- 
+
     - name: Verificar servicios criticos
-
       service_facts:
- 
+
+    - name: Definir lista de servicios segun SO
+      set_fact:
+        servicios_criticos: "{{ servicios_criticos_debian if ansible_os_family == 'Debian' else servicios_criticos_redhat }}"
+
     - name: Mostrar estado de servicios criticos
-
       debug:
-
-        msg: "El servicio {{ item }} está {{ ansible_facts.services[item].state }}"
-
+        msg: >-
+          El servicio {{ item }} está
+          {{ ansible_facts.services[item].state if item in ansible_facts.services else 'no encontrado' }}
       loop: "{{ servicios_criticos }}"
 
-      ignore_errors: yes
- 
     - name: Crear usuario
-
       user:
-
         name: "{{ usuario }}"
-
         state: present
-
         shell: /bin/bash
- 
+
     - name: Actualizar sistema (Debian/Ubuntu)
-
       apt:
-
         update_cache: yes
-
         upgrade: dist
-
       when: ansible_os_family == "Debian"
- 
+
     - name: Actualizar sistema (RedHat/CentOS)
-
       yum:
-
         name: "*"
-
         state: latest
-
       when: ansible_os_family == "RedHat"
- 
