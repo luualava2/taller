@@ -20,23 +20,40 @@
     - name: Verificar uso de disco
       command: df -h
       register: disk_usage
+      changed_when: false
 
-    - name: Mostrar uso de disco
-      debug:
-        var: disk_usage.stdout_lines
-
-    - name: Verificar servicios criticos
+    - name: Obtener informacion de servicios
       service_facts:
 
     - name: Definir lista de servicios segun SO
       set_fact:
-        servicios_criticos: "{{ servicios_criticos_debian if ansible_os_family == 'Debian' else servicios_criticos_redhat }}"
+        servicios_criticos: >-
+          {{
+            servicios_criticos_debian
+            if ansible_os_family == 'Debian'
+            else servicios_criticos_redhat
+          }}
 
-    - name: Mostrar estado de servicios criticos
-      debug:
-        msg: >-
-          El servicio {{ item }} está
-          {{ ansible_facts.services[item].state if item in ansible_facts.services else 'no encontrado' }}
+    - name: Construir reporte de servicios
+      set_fact:
+        reporte_servicios: >-
+          {{
+            (reporte_servicios | default([])) + [
+              {
+                'servicio': item,
+                'estado': (
+                  ansible_facts.services[item].state
+                  if item in ansible_facts.services
+                  else 'no encontrado'
+                ),
+                'status': (
+                  ansible_facts.services[item].status
+                  if item in ansible_facts.services and 'status' in ansible_facts.services[item]
+                  else 'desconocido'
+                )
+              }
+            ]
+          }}
       loop: "{{ servicios_criticos }}"
 
     - name: Crear usuario
@@ -56,3 +73,42 @@
         name: "*"
         state: latest
       when: ansible_os_family == "RedHat"
+
+    - name: Construir reporte final
+      set_fact:
+        reporte_final: |
+          ==================================================
+                    REPORTE DE VALIDACION LINUX
+          ==================================================
+          Hostname         : {{ inventory_hostname }}
+          Sistema Operativo: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Familia OS       : {{ ansible_os_family }}
+          Usuario validado : {{ usuario }}
+
+          -------------------- USO DE DISCO --------------------
+          {% for line in disk_usage.stdout_lines %}
+          {{ line }}
+          {% endfor %}
+
+          ---------------- ESTADO DE SERVICIOS ----------------
+          {% for s in reporte_servicios %}
+          - {{ "%-20s" | format(s.servicio) }} Estado: {{ "%-12s" | format(s.estado) }} | Habilitado: {{ s.status }}
+          {% endfor %}
+
+          ---------------- RESUMEN DE EJECUCION ---------------
+          - Validacion de disco ejecutada correctamente
+          - Validacion de servicios completada
+          - Usuario '{{ usuario }}' verificado/creado correctamente
+          - Actualizacion del sistema ejecutada segun la familia del SO
+
+          ==================================================
+
+    - name: Mostrar reporte final
+      debug:
+        msg: "{{ reporte_final.split('\n') }}"
+
+    - name: Guardar reporte en archivo
+      copy:
+        content: "{{ reporte_final }}"
+        dest: "/tmp/reporte_{{ inventory_hostname }}.txt"
+        mode: '0644'
