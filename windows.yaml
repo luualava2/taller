@@ -12,12 +12,8 @@
 
     - name: Verificar uso de CPU
       win_shell: |
-        Get-WmiObject win32_processor | Select-Object LoadPercentage
+        Get-WmiObject Win32_Processor | Select-Object -ExpandProperty LoadPercentage
       register: cpu_usage
-
-    - name: Mostrar uso de CPU
-      debug:
-        var: cpu_usage.stdout_lines
 
     - name: Verificar servicios
       win_service:
@@ -26,11 +22,6 @@
       loop: "{{ servicios_criticos }}"
       ignore_errors: yes
 
-    - name: Mostrar estado de servicios
-      debug:
-        msg: "Servicio {{ item.item }} estado: {{ item.state | default('desconocido') }}"
-      loop: "{{ service_status.results }}"
-
     - name: Crear usuario
       win_user:
         name: "{{ usuario }}"
@@ -38,6 +29,7 @@
         state: present
         groups:
           - Users
+      register: user_result
 
     - name: Instalar actualizaciones de Windows
       win_updates:
@@ -45,3 +37,43 @@
           - SecurityUpdates
           - CriticalUpdates
         reboot: yes
+      register: updates_result
+
+    - name: Mostrar reporte final
+      debug:
+        msg: |
+          ==================================================
+                 REPORTE DE VALIDACION WINDOWS
+          ==================================================
+          Host: {{ inventory_hostname }}
+
+          [1] USO DE CPU
+          --------------------------------------------------
+          Carga actual de CPU: {{ cpu_usage.stdout | trim }}%
+
+          [2] SERVICIOS CRITICOS
+          --------------------------------------------------
+          {% for svc in service_status.results %}
+          - Servicio: {{ svc.item }}
+            Estado  : {{ svc.state | default('desconocido') }}
+            Existe  : {{ 'Si' if svc.exists is defined and svc.exists else 'No' }}
+          {% endfor %}
+
+          [3] USUARIO LOCAL
+          --------------------------------------------------
+          Usuario: {{ usuario }}
+          Resultado: {{ 'Creado o validado correctamente' if not user_result.failed else 'Error en la creacion' }}
+
+          [4] ACTUALIZACIONES DE WINDOWS
+          --------------------------------------------------
+          {% if updates_result.found_update_count is defined %}
+          Actualizaciones encontradas : {{ updates_result.found_update_count }}
+          Actualizaciones instaladas  : {{ updates_result.installed_update_count | default(0) }}
+          Reinicio requerido          : {{ updates_result.reboot_required | default(false) }}
+          {% else %}
+          Resultado: No se pudo obtener detalle de actualizaciones
+          {% endif %}
+
+          ==================================================
+                 FIN DEL REPORTE
+          ==================================================
